@@ -20,7 +20,8 @@ echo  Para cerrar la aplicacion cierra esta ventana.
 echo  -----------------------------------------------
 echo.
 
-python -m streamlit run app.py --server.headless false --browser.gatherUsageStats false
+start "" http://localhost:8501
+py -3.11 -m streamlit run app.py --server.headless true --browser.gatherUsageStats false
 
 echo.
 echo  La aplicacion se ha cerrado.

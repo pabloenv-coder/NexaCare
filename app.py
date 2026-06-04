@@ -31,6 +31,11 @@ from pdf_report import generar_pdf, generar_pdf_admin
 from hospital_finder import geocodificar, buscar_centros, formatear_distancia
 import folium
 from streamlit_folium import st_folium
+try:
+    from streamlit_js_eval import get_geolocation as _get_geolocation
+    _GEOLOC_OK = True
+except ImportError:
+    _GEOLOC_OK = False
 from email_service import enviar_informe
 
 # ── Configuración ─────────────────────────────────────────────────────────────
@@ -645,6 +650,40 @@ div.stButton > button[title="Analizar síntomas"] {
   color: #ff7070 !important;
 }
 
+/* ══ CHAT — Chip buttons ══ */
+[data-testid^="stButton-chip"] > button {
+  background: rgba(61,142,248,.07) !important;
+  border: 1px solid rgba(61,142,248,.25) !important;
+  color: #5a9ef8 !important;
+  border-radius: 99px !important;
+  font-size: .76rem !important;
+  font-weight: 700 !important;
+  height: 34px !important;
+  padding: 0 8px !important;
+  transition: all .15s ease !important;
+}
+[data-testid^="stButton-chip"] > button:hover {
+  background: rgba(61,142,248,.16) !important;
+  border-color: rgba(61,142,248,.45) !important;
+  color: #8ab8ff !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ══ CHAT — Send button ══ */
+[data-testid="stButton-chat_send"] > button {
+  background: linear-gradient(135deg,#1a4a9e,#1e5bcc) !important;
+  border: 1px solid rgba(61,142,248,.4) !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+  font-size: 1rem !important;
+  height: 42px !important;
+  transition: all .15s ease !important;
+}
+[data-testid="stButton-chat_send"] > button:hover {
+  background: linear-gradient(135deg,#2055bb,#2a6ae0) !important;
+  transform: translateY(-1px) !important;
+}
+
 /* ══ TRIAJE — Pregunta ══ */
 .tx-wrap {
   background: linear-gradient(135deg,#0d1e38,#0f244a);
@@ -911,6 +950,7 @@ _TR = {
     "btn_si":         {"es": "✅  Sí, lo tengo",        "en": "✅  Yes, I have it"},
     "btn_no":         {"es": "❌  No, no lo tengo",     "en": "❌  No, I don't"},
     "btn_buscar":     {"es": "Buscar",                 "en": "Search"},
+    "btn_mi_ubicac":  {"es": "📍",                     "en": "📍"},
     "btn_confirmar":  {"es": "✅ Confirmar y comenzar", "en": "✅ Confirm and start"},
     "btn_cambiar":    {"es": "❌ Cambiar",              "en": "❌ Change"},
     # ── Home ──
@@ -1057,8 +1097,10 @@ _DEF = {
     "token_informe":    None,
     "webhook_enviado":  False,
     "chat_qa":          [],
+    "chat_chip_pending": None,
     "centros":          None,
     "coords_busq":      None,
+    "pedir_geoloc":     False,
     "ubicacion_busq":   "",
 }
 for k, v in _DEF.items():
@@ -1089,7 +1131,8 @@ def ir(pantalla: str):
 def reset_triaje():
     campos = ["sintoma","puntuacion","pregunta_idx","respuestas","inicio_triaje",
               "consulta_guardada","informe_ai","token_informe","webhook_enviado",
-              "chat_qa","centros","ubicacion_busq","sintoma_sugerido","texto_libre"]
+              "chat_qa","chat_chip_pending","centros","ubicacion_busq","sintoma_sugerido","texto_libre",
+              "pedir_geoloc","coords_busq"]
     for k in campos:
         st.session_state[k] = _DEF[k]
 
@@ -2679,13 +2722,32 @@ elif st.session_state.pantalla == "resultado":
 
         with tab2:
             st.markdown(f'<div class="nx-sec" style="margin-top:8px;">{t("rx_centros")}</div>', unsafe_allow_html=True)
-            cl, cb2 = st.columns([4, 1])
-            with cl:
+
+            # ── Geolocalización del navegador (si disponible) ─────────────────
+            if _GEOLOC_OK and st.session_state.get("pedir_geoloc"):
+                _geo = _get_geolocation()
+                if _geo and "coords" in _geo:
+                    _glat = _geo["coords"].get("latitude")
+                    _glon = _geo["coords"].get("longitude")
+                    if _glat is not None and _glon is not None:
+                        st.session_state.coords_busq = (float(_glat), float(_glon))
+                        st.session_state.ubicacion_busq = "📍 Mi ubicación"
+                        with st.spinner(t("rx_buscar_spin")):
+                            st.session_state.centros = buscar_centros(
+                                float(_glat), float(_glon), nivel_color=r["color"]
+                            )
+                        st.session_state.pedir_geoloc = False
+                        st.rerun()
+
+            # ── Barra de búsqueda ─────────────────────────────────────────────
+            _geo_cols = [4, 1, 1] if _GEOLOC_OK else [4, 1]
+            _cols = st.columns(_geo_cols)
+            with _cols[0]:
                 ub = st.text_input(
                     "Ubicación", value=st.session_state.ubicacion_busq,
                     placeholder=t("rx_ub_ph"), label_visibility="collapsed", key="i_ub",
                 )
-            with cb2:
+            with _cols[1]:
                 if st.button(t("btn_buscar"), use_container_width=True, key="btn_buscar"):
                     if ub.strip():
                         st.session_state.ubicacion_busq = ub
@@ -2697,6 +2759,13 @@ elif st.session_state.pantalla == "resultado":
                                 st.session_state.centros = centros
                             else:
                                 st.session_state.centros = None
+                                st.session_state.coords_busq = None
+            if _GEOLOC_OK:
+                with _cols[2]:
+                    if st.button(t("btn_mi_ubicac"), use_container_width=True,
+                                 key="btn_geoloc", help="Usar mi ubicación GPS"):
+                        st.session_state.pedir_geoloc = True
+                        st.rerun()
 
             if st.session_state.centros is None and st.session_state.ubicacion_busq:
                 st.markdown(f'<div class="nx-aviso">{t("rx_no_loc")}</div>', unsafe_allow_html=True)
@@ -2784,6 +2853,26 @@ elif st.session_state.pantalla == "resultado":
                       </div>
                     </div></a>""", unsafe_allow_html=True)
             elif isinstance(st.session_state.centros, list) and not st.session_state.centros:
+                _coords_sc = st.session_state.get("coords_busq")
+                if _coords_sc:
+                    _fmap_sc = folium.Map(
+                        location=list(_coords_sc),
+                        zoom_start=13,
+                        tiles="CartoDB dark_matter",
+                        attr="&copy; CartoDB",
+                    )
+                    folium.CircleMarker(
+                        location=list(_coords_sc),
+                        radius=10, color="#3d8ef8", fill=True,
+                        fill_color="#3d8ef8", fill_opacity=0.9,
+                        popup=folium.Popup("📍 <b>Tu ubicación</b>", max_width=160),
+                        tooltip="Tu ubicación",
+                    ).add_to(_fmap_sc)
+                    folium.CircleMarker(
+                        location=list(_coords_sc),
+                        radius=16, color="#3d8ef8", fill=False, weight=2, opacity=0.5,
+                    ).add_to(_fmap_sc)
+                    st_folium(_fmap_sc, use_container_width=True, height=290, returned_objects=[])
                 st.markdown(f'<div class="nx-reco" style="color:var(--txt3);">{t("rx_sin_centros")}</div>', unsafe_allow_html=True)
 
             st.markdown(f'<div class="nx-sec" style="margin-top:14px;">{t("rx_telef")}</div>', unsafe_allow_html=True)
@@ -2803,39 +2892,66 @@ elif st.session_state.pantalla == "resultado":
                         if tiene_ia_real() else
                         'background:rgba(61,142,248,.08);border:1px solid rgba(61,142,248,.2);color:#3d8ef8;')
 
-            # Cabecera del chat
+            # Procesar chip pendiente del rerun anterior
+            if st.session_state.get("chat_chip_pending"):
+                chip_q = st.session_state.chat_chip_pending
+                st.session_state.chat_chip_pending = None
+                if len(st.session_state.chat_qa) >= 20:
+                    st.session_state.chat_qa.pop(0)
+                r_si = [p for p, ok in st.session_state.respuestas if ok]
+                with st.spinner(t('rx_spin_ia') if tiene_ia_real() else t('rx_spin_demo')):
+                    resp = responder_pregunta(chip_q, sintoma, r["nivel"], r_si)
+                st.session_state.chat_qa.append((chip_q, resp or "Lo siento, inténtalo de nuevo."))
+                st.rerun()
+
+            # ── Header ──────────────────────────────────────────────────────────
             st.markdown(f"""
             <div style="display:flex;align-items:center;justify-content:space-between;
-              padding:10px 14px;background:var(--raised);border:1px solid var(--bdr);
-              border-radius:12px 12px 0 0;margin-top:4px;border-bottom:none;">
+              padding:13px 16px;margin-top:6px;
+              background:linear-gradient(135deg,rgba(61,142,248,.08),rgba(61,142,248,.02));
+              border:1px solid rgba(61,142,248,.2);border-radius:16px 16px 0 0;
+              border-bottom:1px solid rgba(61,142,248,.1);">
               <div>
-                <div style="font-size:.82rem;font-weight:700;color:var(--txt);margin-bottom:2px;">
+                <div style="font-size:.84rem;font-weight:700;color:#e8f0ff;margin-bottom:3px;letter-spacing:.01em;">
                   💬 {t('rx_chat_lbl')}
                 </div>
-                <div style="font-size:.7rem;color:var(--txt3);">
-                  {t('rx_responde')} <strong style="color:var(--acc);">{sintoma}</strong>
+                <div style="font-size:.71rem;color:#4a6080;">
+                  {t('rx_responde')} <strong style="color:#3d8ef8;">{sintoma}</strong>
                 </div>
               </div>
-              <div style="font-size:.71rem;padding:4px 11px;border-radius:99px;font-weight:700;{_ia_pill};flex-shrink:0;">
+              <div style="font-size:.72rem;padding:5px 13px;border-radius:99px;font-weight:700;{_ia_pill};flex-shrink:0;">
                 {_ia_lbl}
               </div>
             </div>""", unsafe_allow_html=True)
 
-            # Área de mensajes
+            # ── Área de mensajes ─────────────────────────────────────────────────
             if not st.session_state.chat_qa:
-                msgs_html = f"""
-                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
-                  padding:28px 16px;gap:12px;text-align:center;">
-                  <div style="width:48px;height:48px;border-radius:14px;
-                    background:rgba(61,142,248,.1);border:1px solid rgba(61,142,248,.2);
-                    display:flex;align-items:center;justify-content:center;font-size:1.6rem;">🤖</div>
-                  <div style="font-size:.85rem;font-weight:600;color:var(--txt2);">{t('rx_chat_empty')}</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;">
-                    <div class="nx-chat-chip">{t('rx_chip1')}</div>
-                    <div class="nx-chat-chip">{t('rx_chip2')}</div>
-                    <div class="nx-chat-chip">{t('rx_chip3')}</div>
-                  </div>
-                </div>"""
+                st.markdown(f"""
+                <div style="border-left:1px solid rgba(61,142,248,.2);
+                  border-right:1px solid rgba(61,142,248,.2);
+                  background:linear-gradient(160deg,#0c1a2e 0%,#071628 100%);
+                  min-height:210px;padding:32px 16px;
+                  display:flex;flex-direction:column;align-items:center;
+                  justify-content:center;gap:12px;text-align:center;">
+                  <div style="width:60px;height:60px;border-radius:18px;
+                    background:linear-gradient(135deg,rgba(61,142,248,.14),rgba(61,142,248,.04));
+                    border:1px solid rgba(61,142,248,.22);
+                    display:flex;align-items:center;justify-content:center;font-size:2rem;">🤖</div>
+                  <div style="font-size:.87rem;font-weight:700;color:#c0d4f0;">{t('rx_chat_empty')}</div>
+                  <div style="font-size:.74rem;color:#334a66;">Pulsa una pregunta rápida o escribe la tuya abajo</div>
+                </div>""", unsafe_allow_html=True)
+
+                # ── Chips funcionales ────────────────────────────────────────────
+                cc1, cc2, cc3 = st.columns(3)
+                for col, chip_key, chip_tr in [
+                    (cc1, "chip1_btn", "rx_chip1"),
+                    (cc2, "chip2_btn", "rx_chip2"),
+                    (cc3, "chip3_btn", "rx_chip3"),
+                ]:
+                    with col:
+                        if st.button(t(chip_tr), key=chip_key, use_container_width=True):
+                            st.session_state.chat_chip_pending = t(chip_tr)
+                            st.rerun()
             else:
                 msgs_html = ""
                 for q, a in st.session_state.chat_qa:
@@ -2850,31 +2966,23 @@ elif st.session_state.pantalla == "resultado":
                       <div class="nx-av bot">🤖</div>
                       <div class="nx-bubble bot">{_a}</div>
                     </div>"""
+                st.markdown(
+                    f'<div style="border-left:1px solid rgba(61,142,248,.2);'
+                    f'border-right:1px solid rgba(61,142,248,.2);'
+                    f'background:linear-gradient(160deg,#0c1a2e 0%,#071628 100%);'
+                    f'min-height:200px;max-height:340px;overflow-y:auto;padding:14px 12px;'
+                    f'scrollbar-width:thin;scrollbar-color:rgba(61,142,248,.15) transparent;">'
+                    f'{msgs_html}</div>',
+                    unsafe_allow_html=True,
+                )
 
-            st.markdown(f"""
-            <style>
-            .nx-chat-chip {{
-              display:inline-flex;align-items:center;
-              background:rgba(61,142,248,.07);border:1px solid rgba(61,142,248,.2);
-              color:var(--acc);border-radius:99px;padding:4px 12px;
-              font-size:.75rem;font-weight:600;cursor:default;
-              transition:background .15s;
-            }}
-            .nx-chat-area {{
-              background:var(--bg);border:1px solid var(--bdr);border-top:none;
-              border-radius:0 0 0 0;min-height:200px;max-height:320px;
-              overflow-y:auto;padding:10px 12px;
-              scrollbar-width:thin;scrollbar-color:var(--bdr) transparent;
-            }}
-            .nx-chat-footer {{
-              background:var(--surf);border:1px solid var(--bdr);border-top:none;
-              border-radius:0 0 12px 12px;padding:10px 12px;
-            }}
-            </style>
-            <div class="nx-chat-area">{msgs_html}</div>""", unsafe_allow_html=True)
-
-            # Input
-            st.markdown('<div class="nx-chat-footer">', unsafe_allow_html=True)
+            # ── Input ────────────────────────────────────────────────────────────
+            st.markdown(
+                '<div style="border:1px solid rgba(61,142,248,.2);border-top:none;'
+                'border-radius:0 0 16px 16px;padding:10px 12px;'
+                'background:rgba(10,20,38,1);">',
+                unsafe_allow_html=True,
+            )
             cq, cs = st.columns([6, 1])
             with cq:
                 preg_usr = st.text_input(
@@ -2890,10 +2998,7 @@ elif st.session_state.pantalla == "resultado":
                         lbl = t('rx_spin_ia') if tiene_ia_real() else t('rx_spin_demo')
                         with st.spinner(lbl):
                             resp = responder_pregunta(preg_usr, sintoma, r["nivel"], r_si)
-                        if resp:
-                            st.session_state.chat_qa.append((preg_usr, resp))
-                        else:
-                            st.session_state.chat_qa.append((preg_usr, "Lo siento, no pude generar una respuesta. Inténtalo de nuevo."))
+                        st.session_state.chat_qa.append((preg_usr, resp or "Lo siento, inténtalo de nuevo."))
                         st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 

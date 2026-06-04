@@ -73,7 +73,7 @@ def _groq_key() -> str | None:
             key = _st.secrets.get("GROQ_API_KEY", "")
         except Exception:
             pass
-    return key if key and not key.startswith("gsk_...") else None
+    return key if key and key.startswith("gsk-") else None
 
 
 def _groq_chat(system: str, user: str, max_tokens: int = 400) -> str | None:
@@ -171,15 +171,21 @@ def generar_informe_triaje(
 
 def responder_pregunta(pregunta: str, sintoma: str, nivel: str, respuestas_si: list[str]) -> str:
     """Siempre devuelve una respuesta útil (nunca None)."""
-    contexto = (
-        f"El paciente acaba de realizar un triaje en NexaCare:\n"
-        f"- Síntoma principal: {sintoma}\n"
-        f"- Nivel asignado: {nivel}\n"
-        f"- Factores positivos: {', '.join(respuestas_si) if respuestas_si else 'ninguno'}"
+    factores_txt = (
+        "; ".join(respuestas_si) if respuestas_si else "ninguno"
     )
     user_msg = (
-        f"{contexto}\n\nPregunta: {pregunta}\n\n"
-        "Responde brevemente, claro y empático. Máximo 120 palabras. Sin asteriscos ni markdown."
+        f"DATOS DEL TRIAJE DE ESTE PACIENTE:\n"
+        f"• Síntoma principal: {sintoma}\n"
+        f"• Nivel de urgencia: {nivel}\n"
+        f"• Factores de riesgo confirmados: {factores_txt}\n\n"
+        f"PREGUNTA DEL PACIENTE: {pregunta}\n\n"
+        "INSTRUCCIONES ESTRICTAS:\n"
+        "1. Responde ESPECÍFICAMENTE para este paciente — menciona su síntoma concreto "
+        "y sus factores de riesgo reales, no des consejos genéricos.\n"
+        "2. Si tiene factores de riesgo, coméntalos en tu respuesta.\n"
+        "3. Máximo 3 frases directas. Sin markdown, asteriscos ni listas.\n"
+        "4. Empieza respondiendo directamente, sin saludos ni rodeos."
     )
 
     # Anthropic

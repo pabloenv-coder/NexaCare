@@ -79,37 +79,96 @@ def _es_valido(nombre: str, tags: dict) -> bool:
     return False
 
 
-def geocodificar(direccion: str) -> tuple[float, float] | None:
+def _nominatim_request(addr: str, countrycodes: str | None = "es") -> tuple[float, float] | None:
     """
-    Geocodifica con Nominatim.
-    Si no hay coma (sin ciudad explícita), añade ', España'.
+    Intenta geocodificar addr con Nominatim.
+    Devuelve (lat, lon) si se encuentra, None si no hay resultado.
+    Propaga TimeoutError/OSError para que el llamador pueda cortar reintentos.
     """
-    addr = direccion.strip()
-    if "," not in addr:
-        addr = f"{addr}, España"
-
-    q = urllib.parse.urlencode({
-        "q": addr,
-        "format": "json",
-        "limit": "1",
-        "countrycodes": "es",
-        "addressdetails": "1",
-    })
+    params: dict = {"q": addr, "format": "json", "limit": "1"}
+    if countrycodes:
+        params["countrycodes"] = countrycodes
+    q = urllib.parse.urlencode(params)
     req = urllib.request.Request(
         f"https://nominatim.openstreetmap.org/search?{q}", headers=_HEADERS
     )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read())
-        if data:
-            return float(data[0]["lat"]), float(data[0]["lon"])
+    with urllib.request.urlopen(req, timeout=8) as r:
+        data = json.loads(r.read())
+    if data:
+        return float(data[0]["lat"]), float(data[0]["lon"])
+    return None
+
+
+def _photon_request(addr: str, solo_espana: bool = True) -> tuple[float, float] | None:
+    """
+    Fallback: geocodifica con Photon (photon.komoot.io).
+    Mismos datos OSM, sin API key, más tolerante desde entornos cloud.
+    Devuelve (lat, lon) o None. Propaga errores de red.
+    """
+    params: dict = {"q": addr, "limit": "1", "lang": "es"}
+    if solo_espana:
+        # Bounding box de España peninsular + Baleares + Canarias
+        params["bbox"] = "-18.16,27.64,4.33,43.79"
+    q = urllib.parse.urlencode(params)
+    req = urllib.request.Request(
+        f"https://photon.komoot.io/api/?{q}", headers=_HEADERS
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        data = json.loads(r.read())
+    features = data.get("features", [])
+    if not features:
         return None
-    except urllib.error.URLError as e:
-        print(f"[NexaCare] Error Nominatim: {e}")
-        return None
-    except (json.JSONDecodeError, KeyError, IndexError) as e:
-        print(f"[NexaCare] Respuesta inesperada de Nominatim: {e}")
-        return None
+    # Filtro adicional: el resultado debe estar en España (countrycode ES)
+    if solo_espana:
+        props = features[0].get("properties", {})
+        if props.get("countrycode", "").upper() not in ("ES", ""):
+            return None
+    coords = features[0]["geometry"]["coordinates"]  # Photon: [lon, lat]
+    return float(coords[1]), float(coords[0])
+
+
+def geocodificar(direccion: str) -> tuple[float, float] | None:
+    """
+    Geocodifica con Nominatim (primario) y Photon (fallback).
+    Si Nominatim falla por red, intenta Photon antes de rendirse.
+    Si el address no incluye ciudad se añade ', España' automáticamente.
+    """
+    addr = direccion.strip()
+    tiene_ciudad = "," in addr
+    addr_es = addr if tiene_ciudad else f"{addr}, España"
+
+    # ── 1. Nominatim ──────────────────────────────────────────────────────────
+    nominatim_caido = False
+    for a, cc in ([(addr, "es"), (addr, None)] if tiene_ciudad
+                  else [(addr_es, "es"), (addr, "es"), (addr_es, None)]):
+        try:
+            result = _nominatim_request(a, cc)
+            if result is not None:
+                return result
+        except (TimeoutError, OSError) as e:
+            print(f"[NexaCare] Nominatim no disponible: {e}")
+            nominatim_caido = True
+            break
+        except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
+            print(f"[NexaCare] Nominatim respuesta inesperada ({a!r}): {e}")
+
+    # ── 2. Photon (fallback) ───────────────────────────────────────────────────
+    photon_candidatos = (
+        [(addr_es, True), (addr, True), (addr, False)] if not tiene_ciudad
+        else [(addr, True), (addr, False)]
+    )
+    for a, es in photon_candidatos:
+        try:
+            result = _photon_request(a, solo_espana=es)
+            if result is not None:
+                return result
+        except (TimeoutError, OSError) as e:
+            print(f"[NexaCare] Photon no disponible: {e}")
+            break
+        except (json.JSONDecodeError, KeyError, IndexError, ValueError) as e:
+            print(f"[NexaCare] Photon respuesta inesperada ({a!r}): {e}")
+
+    return None
 
 
 def buscar_centros(
@@ -136,7 +195,7 @@ def buscar_centros(
 
 def _query_centros(lat: float, lon: float, radio_m: int, urgente: bool) -> list[dict]:
     """Ejecuta la consulta Overpass y devuelve los centros filtrados y ordenados."""
-    query = f"""[out:json][timeout:15];
+    query = f"""[out:json][timeout:25];
 (
   nwr["amenity"="hospital"](around:{radio_m},{lat},{lon});
   nwr["amenity"="clinic"](around:{radio_m},{lat},{lon});
@@ -154,9 +213,9 @@ out center tags;"""
         headers={**_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=25) as r:
             result = json.loads(r.read())
-    except urllib.error.URLError as e:
+    except (TimeoutError, OSError, urllib.error.URLError) as e:
         print(f"[NexaCare] Error Overpass API: {e}")
         return []
     except json.JSONDecodeError as e:
