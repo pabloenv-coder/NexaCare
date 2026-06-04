@@ -617,6 +617,9 @@ div.stButton > button[title="Analizar síntomas"] {
 @keyframes slideInRight { from{opacity:0;transform:translateX(20px);} to{opacity:1;transform:translateX(0);} }
 @keyframes slideInLeft  { from{opacity:0;transform:translateX(-20px);} to{opacity:1;transform:translateX(0);} }
 @keyframes popIn { from{opacity:0;transform:scale(.88);} to{opacity:1;transform:scale(1);} }
+@keyframes nxRingPulse1 { 0%{box-shadow:0 0 0 0 var(--nx-ring-clr,.5);} 70%{box-shadow:0 0 0 22px rgba(0,0,0,0);} 100%{box-shadow:0 0 0 0 rgba(0,0,0,0);} }
+@keyframes nxRingPulse2 { 0%{box-shadow:0 0 0 0 var(--nx-ring-clr,.3);} 70%{box-shadow:0 0 0 18px rgba(0,0,0,0);} 100%{box-shadow:0 0 0 0 rgba(0,0,0,0);} }
+@keyframes nxShimmer    { 0%{background-position:-200% center;} 100%{background-position:200% center;} }
 
 /* ══ TRIAJE — Botones Sí / No ══ */
 [data-testid^="stButton-si_"] > button {
@@ -2044,35 +2047,52 @@ elif st.session_state.pantalla == "home":
 
     /* Symptom buttons — tile style */
     [data-testid^="stButton-sym_"] > button {
-      background: linear-gradient(135deg, var(--surf) 0%, rgba(19,35,60,.9) 100%) !important;
-      border: 1px solid var(--bdr) !important;
-      border-radius: 12px !important;
-      min-height: 58px !important;
-      font-size: 1rem !important;
-      font-weight: 600 !important;
+      background: linear-gradient(135deg, #0f1e36 0%, #0c1a2e 100%) !important;
+      border: 1px solid rgba(61,142,248,.16) !important;
+      border-radius: 14px !important;
+      min-height: 66px !important;
+      font-size: .95rem !important;
+      font-weight: 700 !important;
       color: var(--txt) !important;
       text-align: left !important;
-      padding: 12px 16px !important;
-      transition: all .2s cubic-bezier(.22,.68,0,1.2) !important;
+      padding: 14px 42px 14px 16px !important;
+      transition: all .22s cubic-bezier(.22,.68,0,1.2) !important;
       position: relative !important;
       overflow: hidden !important;
+      letter-spacing: .01em !important;
     }
+    /* Línea de acento inferior */
     [data-testid^="stButton-sym_"] > button::before {
       content: '';
       position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(61,142,248,.06), transparent);
+      bottom: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(61,142,248,.6), transparent);
       opacity: 0;
       transition: opacity .2s !important;
     }
+    /* Flecha derecha */
+    [data-testid^="stButton-sym_"] > button::after {
+      content: '›';
+      position: absolute;
+      right: 14px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.3rem;
+      color: var(--txt3);
+      transition: color .2s, transform .2s !important;
+      font-weight: 400;
+    }
     [data-testid^="stButton-sym_"] > button:hover {
-      background: linear-gradient(135deg, rgba(20,44,82,.95) 0%, rgba(22,50,90,1) 100%) !important;
-      border-color: rgba(61,142,248,.5) !important;
-      transform: translateY(-3px) scale(1.015) !important;
-      box-shadow: 0 10px 28px rgba(0,0,0,.3), 0 0 0 1px rgba(61,142,248,.18) !important;
+      background: linear-gradient(135deg, #122040 0%, #0f1e38 100%) !important;
+      border-color: rgba(61,142,248,.45) !important;
+      transform: translateY(-3px) !important;
+      box-shadow: 0 10px 28px rgba(0,0,0,.35), 0 0 0 1px rgba(61,142,248,.15) !important;
       color: #d0e8ff !important;
     }
     [data-testid^="stButton-sym_"] > button:hover::before { opacity: 1 !important; }
+    [data-testid^="stButton-sym_"] > button:hover::after  {
+      color: var(--acc) !important;
+      transform: translateY(-50%) translateX(3px) !important;
+    }
 
     /* Botón describir síntoma */
     [data-testid="stButton-🔍"] > button {
@@ -2548,30 +2568,49 @@ elif st.session_state.pantalla == "resultado":
     # ══ LAYOUT ═══════════════════════════════════════════════════════════════
     # — Hero banner (full width) —
     _hero_cls = "nx-hero-rojo" if r["color"] == "red" else ""
+    _ring_spd  = "1.5s" if r["color"] == "red" else "2.2s"
     st.markdown(f"""
     <div class="{_hero_cls}" style="
-      background:{e['bg']};border:2px solid {e['bdr']};border-radius:16px;
-      padding:14px 22px 12px;margin-bottom:10px;
+      background:{e['bg']};border:2px solid {e['bdr']};border-radius:20px;
+      padding:22px 26px 18px;margin-bottom:10px;
       animation:popIn .4s cubic-bezier(.22,.68,0,1.2) both;
       position:relative;overflow:hidden;">
-      <!-- Glow decorativo -->
-      <div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;
-        border-radius:50%;background:radial-gradient(circle,{e['bdr']},transparent 70%);
+      <!-- Shimmer line superior -->
+      <div style="position:absolute;top:0;left:0;right:0;height:2px;
+        background:linear-gradient(90deg,transparent,{e['txt']},rgba(255,255,255,.4),{e['txt']},transparent);
+        background-size:200% 100%;animation:nxShimmer 3s linear infinite;"></div>
+      <!-- Glow decorativo fondo -->
+      <div style="position:absolute;top:-60px;right:-60px;width:220px;height:220px;
+        border-radius:50%;background:radial-gradient(circle,rgba({e['rgb']},.12),transparent 65%);
         pointer-events:none;"></div>
-      <!-- Fila superior: emoji + nivel + porcentaje -->
-      <div style="display:flex;align-items:center;gap:18px;margin-bottom:14px;">
-        <div style="font-size:3rem;line-height:1;flex-shrink:0;
-          animation:floatEmoji 4s ease-in-out 1s infinite;">{r['emoji']}</div>
+      <!-- Fila superior: anillo+emoji + nivel + porcentaje -->
+      <div style="display:flex;align-items:center;gap:24px;margin-bottom:18px;">
+        <!-- Anillo de urgencia -->
+        <div style="position:relative;flex-shrink:0;">
+          <div style="
+            width:96px;height:96px;border-radius:50%;
+            background:radial-gradient(circle,rgba({e['rgb']},.14),rgba({e['rgb']},.03));
+            border:2px solid rgba({e['rgb']},.55);
+            display:flex;align-items:center;justify-content:center;
+            animation:nxRingPulse1 {_ring_spd} ease-out infinite;
+            position:relative;">
+            <div style="position:absolute;inset:-8px;border-radius:50%;
+              border:1px solid rgba({e['rgb']},.2);
+              animation:nxRingPulse2 {_ring_spd} ease-out .4s infinite;"></div>
+            <div style="font-size:3rem;line-height:1;
+              animation:floatEmoji 4s ease-in-out 1s infinite;">{r['emoji']}</div>
+          </div>
+        </div>
         <div style="flex:1;">
           <div style="font-size:1.75rem;font-weight:900;letter-spacing:3px;
             color:{e['txt']};text-transform:uppercase;line-height:1;
-            margin-bottom:4px;">{r['nivel']}</div>
+            margin-bottom:6px;">{r['nivel']}</div>
           <div style="font-size:.8rem;color:{e['txt']};opacity:.6;">
             {t('rx_urg')} · NexaCare · {sintoma}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
-          <div id="nx-pct-num" style="font-size:2.4rem;font-weight:900;color:{e['txt']};line-height:1;">0%</div>
-          <div style="font-size:.68rem;color:{e['txt']};opacity:.55;margin-top:2px;">{t('rx_idx_grav')}</div>
+          <div id="nx-pct-num" style="font-size:3rem;font-weight:900;color:{e['txt']};line-height:1;">0%</div>
+          <div style="font-size:.68rem;color:{e['txt']};opacity:.55;margin-top:3px;">{t('rx_idx_grav')}</div>
         </div>
       </div>
       <!-- Barra de gravedad -->
@@ -2608,18 +2647,41 @@ elif st.session_state.pantalla == "resultado":
 
     # — Fila de stats (3 columnas) —
     st.markdown(f"""
+    <style>
+    .rx-stat-new {{
+      background:linear-gradient(160deg,#0f1e36,#0c1a2e);
+      border:1px solid rgba(61,142,248,.14);border-radius:14px;
+      padding:16px 12px 14px;text-align:center;
+      position:relative;overflow:hidden;
+      transition:transform .18s,box-shadow .18s;
+      animation:pageIn .4s ease both;
+    }}
+    .rx-stat-new:hover{{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3);}}
+    .rx-stat-new::before{{
+      content:'';position:absolute;top:0;left:0;right:0;height:2px;
+      background:linear-gradient(90deg,transparent,rgba(61,142,248,.5),transparent);
+    }}
+    .rx-stat-new.urg::before{{
+      background:linear-gradient(90deg,transparent,rgba({e['rgb']},.8),transparent);
+    }}
+    .rx-stat-new.urg{{border-color:rgba({e['rgb']},.2);}}
+    .rx-stat-icon{{font-size:1.4rem;display:block;margin-bottom:7px;}}
+    </style>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
-      <div class="rx-stat">
+      <div class="rx-stat-new" style="animation-delay:.1s;">
+        <span class="rx-stat-icon">🩺</span>
         <div class="rx-stat-l">{t('rx_sintoma')}</div>
         <div class="rx-stat-v" style="font-size:.83rem;line-height:1.3;">{sintoma}</div>
       </div>
-      <div class="rx-stat">
+      <div class="rx-stat-new" style="animation-delay:.2s;">
+        <span class="rx-stat-icon">📊</span>
         <div class="rx-stat-l">{t('rx_punt')}</div>
         <div class="rx-stat-v">{pts}/{total_pts}</div>
       </div>
-      <div class="rx-stat">
+      <div class="rx-stat-new urg" style="animation-delay:.3s;">
+        <span class="rx-stat-icon">⚠️</span>
         <div class="rx-stat-l">{t('rx_grav')}</div>
-        <div class="rx-stat-v" style="color:{e['txt']};">{porcentaje}%</div>
+        <div class="rx-stat-v" style="color:{e['txt']};font-size:1.2rem;">{porcentaje}%</div>
       </div>
     </div>""", unsafe_allow_html=True)
 
@@ -2713,12 +2775,31 @@ elif st.session_state.pantalla == "resultado":
         tab1, tab2, tab3 = st.tabs([t('rx_tab1'), t('rx_tab2'), t('rx_tab3')])
 
         with tab1:
-            for i, paso in enumerate(r["que_hacer"], 1):
-                st.markdown(f"""
-                <div class="rx-step" style="animation-delay:{i*0.08}s;">
-                  <div class="rx-step-n">{i}</div>
-                  <div class="rx-step-txt">{paso}</div>
-                </div>""", unsafe_allow_html=True)
+            _pasos = r["que_hacer"]
+            _steps_html = ""
+            for i, paso in enumerate(_pasos, 1):
+                _is_last = (i == len(_pasos))
+                _steps_html += f"""
+                <div style="display:flex;gap:16px;align-items:flex-start;
+                  padding:14px 6px 14px 4px;position:relative;
+                  animation:slideInRight .4s ease both;animation-delay:{i*0.09}s;">
+                  <!-- Número + línea vertical -->
+                  <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:0;">
+                    <div style="
+                      width:38px;height:38px;border-radius:50%;flex-shrink:0;
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:.92rem;font-weight:900;color:#fff;
+                      background:linear-gradient(135deg,rgba({e['rgb']},.9),rgba({e['rgb']},.65));
+                      box-shadow:0 0 0 4px rgba({e['rgb']},.12),0 4px 14px rgba({e['rgb']},.3);
+                      position:relative;z-index:1;">{i}</div>
+                    {'<div style="width:2px;flex:1;min-height:18px;margin-top:4px;background:linear-gradient(180deg,rgba(' + e["rgb"] + ',.45),rgba(' + e["rgb"] + ',.05));border-radius:2px;"></div>' if not _is_last else ''}
+                  </div>
+                  <!-- Texto -->
+                  <div style="flex:1;padding-top:8px;padding-bottom:{0 if _is_last else 4}px;">
+                    <div style="font-size:.88rem;color:var(--txt2);line-height:1.6;">{paso}</div>
+                  </div>
+                </div>"""
+            st.markdown(f'<div style="padding:4px 0;">{_steps_html}</div>', unsafe_allow_html=True)
 
         with tab2:
             st.markdown(f'<div class="nx-sec" style="margin-top:8px;">{t("rx_centros")}</div>', unsafe_allow_html=True)
